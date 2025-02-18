@@ -1,31 +1,9 @@
-;var Channel = (function() {
+var Channel = (function() {
   "use strict";
 
   var s_curTranId = Math.floor(Math.random()*1000001);
   var s_boundChans = { };
   var s_transIds = { };
-
-  function s_addBoundChan(win, origin, scope, handler) {
-      if (!s_boundChans[origin]) s_boundChans[origin] = { };
-      if (!s_boundChans[origin][scope]) s_boundChans[origin][scope] = [ ];
-      s_boundChans[origin][scope].push({win: win, handler: handler});
-  }
-
-  function s_removeBoundChan(win, origin, scope) {
-      var arr = s_boundChans[origin][scope];
-      for (var i = 0; i < arr.length; i++) {
-          if (arr[i].win === win) {
-              arr.splice(i, 1);
-          }
-      }
-      if (s_boundChans[origin][scope].length === 0) {
-          delete s_boundChans[origin][scope];
-      }
-  }
-
-  function s_isArray(obj) {
-      return Array.isArray ? Array.isArray(obj) : (obj.constructor.toString().indexOf("Array") !== -1);
-  }
 
   var s_onMessage = function(e) {
       try {
@@ -35,8 +13,7 @@
           return;
       }
 
-      var w = e.source;
-      var o = e.origin;
+      var o = e.origin || '*'; // ✅ Default origin for WebView
       var s, i, meth;
 
       if (typeof m.method === 'string') {
@@ -51,19 +28,15 @@
           var delivered = false;
           if (s_boundChans[o] && s_boundChans[o][s]) {
               for (var j = 0; j < s_boundChans[o][s].length; j++) {
-                  if (s_boundChans[o][s][j].win === w) {
-                      s_boundChans[o][s][j].handler(o, meth, m);
-                      delivered = true;
-                      break;
-                  }
+                  s_boundChans[o][s][j].handler(o, meth, m);
+                  delivered = true;
+                  break;
               }
           }
           if (!delivered && s_boundChans['*'] && s_boundChans['*'][s]) {
               for (var j = 0; j < s_boundChans['*'][s].length; j++) {
-                  if (s_boundChans['*'][s][j].win === w) {
-                      s_boundChans['*'][s][j].handler(o, meth, m);
-                      break;
-                  }
+                  s_boundChans['*'][s][j].handler(o, meth, m);
+                  break;
               }
           }
       } else if (typeof i !== 'undefined') {
@@ -76,19 +49,18 @@
 
   return {
       build: function(cfg) {
-          if (!window.JSON || !window.JSON.stringify || !window.JSON.parse) {
-              throw "jschannel cannot run this browser, no JSON parsing/serialization";
-          }
+          if (!window.postMessage && !window.ReactNativeWebView) 
+              throw("jschannel cannot run in this environment, no postMessage");
 
-          if (typeof cfg !== 'object') throw "Channel build invoked without a proper object argument";
+          if (typeof cfg != 'object') throw("Channel build invoked without a proper object argument");
 
-          var validOrigin = typeof cfg.origin === 'string' &&
+          var validOrigin = typeof cfg.origin === 'string' && 
               (cfg.origin === "*" || /^https?:\/\/[-a-zA-Z0-9_\.]+(:\d+)?/.test(cfg.origin));
 
-          if (!validOrigin) throw "Channel.build() called with an invalid origin";
+          if (!validOrigin) throw ("Channel.build() called with an invalid origin");
 
           if (typeof cfg.scope !== 'undefined') {
-              if (typeof cfg.scope !== 'string') throw 'scope must be a string';
+              if (typeof cfg.scope !== 'string') throw 'scope, when specified, must be a string';
               if (cfg.scope.includes('::')) throw "scope may not contain double colons '::'";
           }
 
@@ -98,24 +70,6 @@
           var inTbl = { };
           var ready = false;
           var pendingQueue = [ ];
-
-          var createTransaction = function(id, origin, callbacks) {
-              return {
-                  origin: origin,
-                  invoke: function(cbName, v) {
-                      if (!inTbl[id]) throw "attempting to invoke a callback of a nonexistent transaction: " + id;
-                      postMessage({ id: id, callback: cbName, params: v });
-                  },
-                  error: function(error, message) {
-                      delete inTbl[id];
-                      postMessage({ id: id, error: error, message: message });
-                  },
-                  complete: function(v) {
-                      delete inTbl[id];
-                      postMessage({ id: id, result: v });
-                  }
-              };
-          };
 
           var postMessage = function(msg) {
               if (!msg) throw "postMessage called with null message";
@@ -162,8 +116,14 @@
 
                   var callbacks = { };
                   var callbackNames = [ ];
+                  var seen = [ ];
 
                   var pruneFunctions = function (path, obj) {
+                      if (seen.indexOf(obj) >= 0) {
+                          throw "params cannot be a recursive data structure"
+                      }
+                      seen.push(obj);
+                     
                       if (typeof obj === 'object') {
                           for (var k in obj) {
                               if (!obj.hasOwnProperty(k)) continue;
@@ -193,11 +153,11 @@
                   postMessage({ method: m.method, params: m.params });
               },
               destroy: function () {
-                  s_removeBoundChan(cfg.window, cfg.origin, cfg.scope || '');
                   ready = false;
                   regTbl = { };
                   inTbl = { };
                   outTbl = { };
+                  pendingQueue = [ ];
               }
           };
 
