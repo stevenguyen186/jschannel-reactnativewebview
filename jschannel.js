@@ -499,7 +499,8 @@
                     }
                     // For react-native-webview, postMessage takes only one argument.
                     if (cfg.useRNWebView) {
-                        cfg.window.postMessage(JSON.stringify(msg));
+                        // cfg.window.postMessage(JSON.stringify(msg)); // Test with Oleg
+                        cfg.window.ReactNativeWebView.postMessage(JSON.stringify(msg));
                     } else {
                         cfg.window.postMessage(JSON.stringify(msg), cfg.origin);
                     }
