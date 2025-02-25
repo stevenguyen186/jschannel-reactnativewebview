@@ -230,7 +230,7 @@
             };
 
             /* browser capabilities check */
-            if (!window.postMessage) throw("jschannel cannot run this browser, no postMessage");
+            // if (!window.postMessage) throw("jschannel cannot run this browser, no postMessage");
             if (!window.JSON || !window.JSON.stringify || ! window.JSON.parse) {
                 throw("jschannel cannot run this browser, no JSON parsing/serialization");
             }
